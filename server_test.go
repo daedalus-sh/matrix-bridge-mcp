@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -346,5 +347,34 @@ func TestClean(t *testing.T) {
 	}
 	if got := clean("abcdef", 3); got != "abc … [cut]" {
 		t.Errorf("cut = %q", got)
+	}
+}
+
+// Over a unix socket every request names a client address, which Synapse
+// needs on such a listener (a login without one is a 500).
+func TestUnixSocketSendsForwardedFor(t *testing.T) {
+	sock := t.TempDir() + "/hs.sock"
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	var mu sync.Mutex
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Header.Get("X-Forwarded-For"))
+		mu.Unlock()
+		writeJSON(w, map[string]any{"access_token": "tok", "joined_rooms": []string{}})
+	})}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	mx := newMatrixClient(sock, "", "reader", "pw")
+	if err := mx.do(context.Background(), "GET", "/_matrix/client/v3/joined_rooms", nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 2 || seen[0] != "127.0.0.1" || seen[1] != "127.0.0.1" {
+		t.Errorf("X-Forwarded-For on login and call = %q", seen)
 	}
 }

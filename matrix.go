@@ -19,8 +19,12 @@ import (
 // account (the reader), over a unix socket or plain HTTP. It never sends an
 // event: the only POST it makes besides login is a search.
 type matrixClient struct {
-	base     string
-	http     *http.Client
+	base string
+	http *http.Client
+	// Over a unix socket the homeserver sees no client address; Synapse
+	// takes it from X-Forwarded-For on such a listener, and fails a login
+	// without one. Only this server can reach that socket.
+	socket   bool
 	user     string
 	password string
 
@@ -33,6 +37,7 @@ func newMatrixClient(socket, baseURL, user, password string) *matrixClient {
 	tr := &http.Transport{MaxIdleConns: 8, IdleConnTimeout: 90 * time.Second}
 	if socket != "" {
 		c.base = "http://synapse"
+		c.socket = true
 		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
@@ -127,6 +132,7 @@ func (c *matrixClient) raw(ctx context.Context, method, path string, q url.Value
 	if tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
+	c.forwarded(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -147,6 +153,12 @@ func (c *matrixClient) raw(ctx context.Context, method, path string, q url.Value
 	return nil
 }
 
+func (c *matrixClient) forwarded(req *http.Request) {
+	if c.socket {
+		req.Header.Set("X-Forwarded-For", "127.0.0.1")
+	}
+}
+
 // media downloads an mxc:// URI through the authenticated media API, refusing
 // anything over max bytes.
 func (c *matrixClient) media(ctx context.Context, mxc string, max int64) ([]byte, string, error) {
@@ -165,6 +177,7 @@ func (c *matrixClient) media(ctx context.Context, mxc string, max int64) ([]byte
 		return nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
+	c.forwarded(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, "", err
