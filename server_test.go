@@ -23,6 +23,7 @@ type fakeHS struct {
 	requests []string
 	logins   int
 	revoke   bool
+	searched []any
 }
 
 const (
@@ -30,6 +31,7 @@ const (
 	groupRoom = "!group:example.org"
 	spaceRoom = "!space:example.org"
 	botRoom   = "!bot:example.org"
+	liRoom    = "!li:example.org"
 	operator  = "@alice:example.org"
 	ghostBob  = "@whatsapp_123:example.org"
 )
@@ -44,9 +46,11 @@ func state(typ, key string, content any) map[string]any {
 	return e
 }
 
-func bridge(roomType, channel string) map[string]any {
+func bridge(roomType, channel string) map[string]any { return bridgeOn("whatsapp", roomType, channel) }
+
+func bridgeOn(protocol, roomType, channel string) map[string]any {
 	return state("m.bridge", "x", map[string]any{
-		"protocol":             map[string]any{"id": "whatsapp", "displayname": "WhatsApp"},
+		"protocol":             map[string]any{"id": protocol},
 		"channel":              map[string]any{"id": channel},
 		"com.beeper.room_type": roomType,
 	})
@@ -91,6 +95,7 @@ func (f *fakeHS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			groupRoom: room("Family", bridge("", "999@g.us")),
 			spaceRoom: room("WhatsApp", bridge("space", "")),
 			botRoom:   room("WhatsApp bridge bot"),
+			liRoom:    room("Carol", bridgeOn("linkedin", "dm", "urn:li:msg_conversation:1")),
 		}}})
 	case r.URL.Path == "/_matrix/client/v3/rooms/"+dmRoom+"/messages":
 		writeJSON(w, map[string]any{
@@ -113,6 +118,9 @@ func (f *fakeHS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		rooms := body["search_categories"].(map[string]any)["room_events"].(map[string]any)["filter"].(map[string]any)["rooms"].([]any)
+		f.mu.Lock()
+		f.searched = rooms
+		f.mu.Unlock()
 		for _, room := range rooms {
 			if room == botRoom || room == spaceRoom {
 				f.t.Errorf("search reached a room that is not a chat: %v", room)
@@ -138,12 +146,17 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 func connect(t *testing.T, hidden map[string]bool, perMinute int) (*mcp.ClientSession, *fakeHS) {
+	return connectTo(t, "whatsapp", hidden, perMinute)
+}
+
+// connectTo starts an instance serving one network ("" serves every bridge).
+func connectTo(t *testing.T, network string, hidden map[string]bool, perMinute int) (*mcp.ClientSession, *fakeHS) {
 	t.Helper()
 	hs := &fakeHS{t: t}
 	srv := httptest.NewServer(hs)
 	t.Cleanup(srv.Close)
 	mx := newMatrixClient("", srv.URL, "reader", "pw")
-	s := &server{mx: mx, chats: &chats{mx: mx, operator: operator, hidden: hidden}, limit: &limiter{max: perMinute}}
+	s := &server{mx: mx, chats: &chats{mx: mx, operator: operator, hidden: hidden, network: network}, limit: &limiter{max: perMinute}, label: "WhatsApp"}
 	m := mcp.NewServer(&mcp.Implementation{Name: "test"}, nil)
 	s.register(m)
 	st, ct := mcp.NewInMemoryTransports()
@@ -376,5 +389,57 @@ func TestUnixSocketSendsForwardedFor(t *testing.T) {
 	defer mu.Unlock()
 	if len(seen) != 2 || seen[0] != "127.0.0.1" || seen[1] != "127.0.0.1" {
 		t.Errorf("X-Forwarded-For on login and call = %q", seen)
+	}
+}
+
+// One instance per network: an instance serving WhatsApp never lists, reads or
+// searches a LinkedIn chat, and the reverse; with no network it serves both.
+func TestOneNetworkPerInstance(t *testing.T) {
+	ids := func(cs *mcp.ClientSession) map[string]string {
+		out, isErr := callJSON(t, cs, "list_chats", map[string]any{})
+		if isErr {
+			t.Fatal(out)
+		}
+		got := map[string]string{}
+		for _, c := range out["chats"].([]any) {
+			m := c.(map[string]any)
+			got[m["chat"].(string)] = m["network"].(string)
+		}
+		return got
+	}
+
+	wa, waHS := connectTo(t, "whatsapp", nil, 100)
+	if got := ids(wa); len(got) != 2 || got[liRoom] != "" || got[dmRoom] != "whatsapp" {
+		t.Errorf("whatsapp instance lists %v", got)
+	}
+	if out, isErr := callJSON(t, wa, "read_chat", map[string]any{"chat": liRoom}); !isErr {
+		t.Errorf("whatsapp instance read a linkedin chat: %v", out)
+	}
+	if out, isErr := callJSON(t, wa, "search", map[string]any{"query": "hello"}); isErr {
+		t.Fatal(out)
+	}
+	for _, room := range waHS.searched {
+		if room == liRoom {
+			t.Errorf("whatsapp instance searched the linkedin chat")
+		}
+	}
+
+	li, liHS := connectTo(t, "LinkedIn", nil, 100)
+	if got := ids(li); len(got) != 1 || got[liRoom] != "linkedin" {
+		t.Errorf("linkedin instance lists %v", got)
+	}
+	if out, isErr := callJSON(t, li, "read_chat", map[string]any{"chat": dmRoom}); !isErr {
+		t.Errorf("linkedin instance read a whatsapp chat: %v", out)
+	}
+	if out, isErr := callJSON(t, li, "search", map[string]any{"query": "hello"}); isErr {
+		t.Fatal(out)
+	}
+	if len(liHS.searched) != 1 || liHS.searched[0] != liRoom {
+		t.Errorf("linkedin instance searched %v", liHS.searched)
+	}
+
+	all, _ := connectTo(t, "", nil, 100)
+	if got := ids(all); len(got) != 3 {
+		t.Errorf("an instance with no network lists %v", got)
 	}
 }

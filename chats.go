@@ -13,7 +13,8 @@ import (
 
 // A bridged chat as this server shows it. Only rooms a bridge made (they
 // carry m.bridge state) are chats: the bridge's space and its bot's
-// management room are not, and no tool reads them.
+// management room are not, and no tool reads them. With a network set, only
+// that bridge's rooms are.
 type chat struct {
 	ID          string `json:"chat"`
 	Name        string `json:"name"`
@@ -32,6 +33,10 @@ type chats struct {
 	mx       *matrixClient
 	operator string
 	hidden   map[string]bool
+	// The one network this instance serves (the bridge's protocol id, e.g.
+	// whatsapp); empty serves every bridge. A chat of another network is not
+	// a chat to any tool: never listed, read, searched or shown.
+	network string
 
 	mu  sync.Mutex
 	at  time.Time
@@ -119,6 +124,9 @@ func (c *chats) overview(ctx context.Context) (map[string]*chat, error) {
 			}
 		}
 		if !bridged || ch.Kind == "space" {
+			continue
+		}
+		if c.network != "" && !strings.EqualFold(ch.Network, c.network) {
 			continue
 		}
 		if ch.Name == "" {

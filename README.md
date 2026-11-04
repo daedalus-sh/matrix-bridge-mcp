@@ -2,8 +2,10 @@
 
 A read-only [MCP](https://modelcontextprotocol.io) server for the chats a
 Matrix homeserver bridges in with [mautrix](https://docs.mau.fi) bridges.
-Built for one person's WhatsApp, behind a private homeserver; it reads any
-mautrix bridge's rooms.
+Built for one person's WhatsApp and LinkedIn, behind a private homeserver; it
+reads any mautrix bridge's rooms. Run one instance per network
+(`MATRIX_NETWORK=whatsapp`, `MATRIX_NETWORK=linkedin`), each with its own token,
+so a client is granted one network at a time; unset, one instance serves them all.
 
 It can read your chats. It cannot write to them: there is no tool that sends,
 reacts, edits, deletes, marks read, joins or leaves, and it is meant to run
@@ -37,7 +39,8 @@ reads:
   relay mode off. The bridge drops anything that user sends, so even a
   compromised server cannot speak as you.
 - **Only bridged rooms.** A room is a chat only if a bridge made it (it has
-  `m.bridge` state). The bridge's space and its bot's management room, where
+  `m.bridge` state). With `MATRIX_NETWORK` set, only that bridge's rooms are
+  chats, to every tool. The bridge's space and its bot's management room, where
   text is read as bridge commands, are never listed or read. `HIDDEN_CHATS`
   removes chosen rooms entirely.
 - **No egress of its own.** It talks to the homeserver and nothing else: no
@@ -53,6 +56,8 @@ MATRIX_SOCKET=/run/synapse/client.sock   # or MATRIX_URL=http://127.0.0.1:8008
 MATRIX_USER=reader
 MATRIX_PASSWORD=…                         # or MATRIX_PASSWORD_FILE
 MATRIX_OPERATOR=@you:example.org          # whose messages are "me"
+MATRIX_NETWORK=whatsapp                   # only this bridge's chats (unset: all)
+NETWORK_NAME=WhatsApp                     # what the tools call them
 MCP_TOKEN=…                               # 32+ characters; or MCP_TOKEN_FILE
 MCP_LISTEN=0.0.0.0:8080                   # default 127.0.0.1:8080
 HIDDEN_CHATS=!abc:example.org,!def:example.org
