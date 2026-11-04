@@ -30,7 +30,7 @@ type fileInfo struct {
 	Seconds   int64  `json:"seconds,omitempty"`
 	Width     int    `json:"width,omitempty"`
 	Height    int    `json:"height,omitempty"`
-	ImageTool bool   `json:"viewable_with_get_image,omitempty"`
+	Fetchable bool   `json:"fetchable,omitempty"`
 }
 
 type reaction struct {
@@ -143,18 +143,14 @@ func fill(msg *message, evType string, m messageContent) {
 	case "m.image", "m.video", "m.audio", "m.file":
 		msg.Text = ""
 		msg.Caption = clean(caption(m), maxText)
-		name := m.FileName
-		if name == "" {
-			name = m.Body
-		}
 		msg.File = &fileInfo{
-			Name:      clean(name, 200),
+			Name:      clean(fileName(m), 200),
 			Mime:      m.Info.MimeType,
 			Bytes:     m.Info.Size,
 			Seconds:   m.Info.Duration / 1000,
 			Width:     m.Info.W,
 			Height:    m.Info.H,
-			ImageTool: m.MsgType == "m.image" && m.URL != "",
+			Fetchable: hasMedia(m),
 		}
 	default:
 		msg.Text = clean(m.Body, maxText)

@@ -111,6 +111,13 @@ func (f *fakeHS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 	case r.URL.Path == "/_matrix/client/v3/rooms/"+dmRoom+"/event/$img":
 		writeJSON(w, ev("m.room.message", "$img", operator, 1003, map[string]any{"msgtype": "m.image", "body": "look at this", "filename": "IMG_1.jpg", "url": "mxc://example.org/abc", "info": map[string]any{"mimetype": "image/jpeg"}}))
+	case r.URL.Path == "/_matrix/client/v3/rooms/"+dmRoom+"/event/$pdf":
+		writeJSON(w, ev("m.room.message", "$pdf", ghostBob, 1006, map[string]any{"msgtype": "m.file", "body": "offer.pdf", "filename": "offer.pdf", "url": "mxc://example.org/pdf", "info": map[string]any{"mimetype": "application/pdf"}}))
+	case r.URL.Path == "/_matrix/client/v3/rooms/"+dmRoom+"/event/$m1":
+		writeJSON(w, ev("m.room.message", "$m1", ghostBob, 1001, map[string]any{"msgtype": "m.text", "body": "hello"}))
+	case r.URL.Path == "/_matrix/client/v1/media/download/example.org/pdf":
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte("%PDF-1.7 offer"))
 	case r.URL.Path == "/_matrix/client/v1/media/download/example.org/abc":
 		w.Header().Set("Content-Type", "image/jpeg")
 		_, _ = w.Write([]byte("\xff\xd8\xffJPEG"))
@@ -203,7 +210,7 @@ func TestToolsAreReadOnly(t *testing.T) {
 			t.Errorf("%s is not marked read-only", tool.Name)
 		}
 	}
-	if got := strings.Join(names, ","); got != "get_context,get_image,list_chats,read_chat,search" {
+	if got := strings.Join(names, ","); got != "get_context,get_file,list_chats,read_chat,search" {
 		t.Errorf("tools = %s", got)
 	}
 }
@@ -258,7 +265,7 @@ func TestReadChat(t *testing.T) {
 		t.Errorf("deleted = %v", del)
 	}
 	img := msgs[2].(map[string]any)
-	if img["kind"] != "image" || img["caption"] != "look at this" || img["from_me"] != true {
+	if img["kind"] != "image" || img["caption"] != "look at this" || img["from_me"] != true || img["file"].(map[string]any)["fetchable"] != true {
 		t.Errorf("image = %v", img)
 	}
 	if out["before"] != "t-older" {
@@ -296,9 +303,9 @@ func TestSearchNamesOnlyChats(t *testing.T) {
 	}
 }
 
-func TestGetImage(t *testing.T) {
+func TestGetFile(t *testing.T) {
 	cs, _ := connect(t, nil, 100)
-	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_image", Arguments: map[string]any{"chat": dmRoom, "message": "$img"}})
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_file", Arguments: map[string]any{"chat": dmRoom, "message": "$img"}})
 	if err != nil || res.IsError {
 		t.Fatal(err, res)
 	}
@@ -453,5 +460,43 @@ func TestEmptyNetworkListsNoChats(t *testing.T) {
 	}
 	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, `"chats":[]`) {
 		t.Errorf("want an empty array, got %s", text)
+	}
+}
+
+func TestGetFileReturnsAPDF(t *testing.T) {
+	cs, _ := connect(t, nil, 100)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_file", Arguments: map[string]any{"chat": dmRoom, "message": "$pdf"}})
+	if err != nil || res.IsError {
+		t.Fatal(err, res)
+	}
+	var meta map[string]any
+	_ = json.Unmarshal([]byte(res.Content[0].(*mcp.TextContent).Text), &meta)
+	if meta["name"] != "offer.pdf" || meta["mime"] != "application/pdf" || meta["note"] == nil {
+		t.Errorf("meta = %v", meta)
+	}
+	// The homeserver served octet-stream; the sender's declared type wins.
+	doc, ok := res.Content[1].(*mcp.EmbeddedResource)
+	if !ok || doc.Resource.MIMEType != "application/pdf" || string(doc.Resource.Blob) != "%PDF-1.7 offer" {
+		t.Errorf("document = %#v", res.Content[1])
+	}
+}
+
+func TestGetFileRefusesATextMessage(t *testing.T) {
+	cs, _ := connect(t, nil, 100)
+	if out, isErr := callJSON(t, cs, "get_file", map[string]any{"chat": dmRoom, "message": "$m1"}); !isErr {
+		t.Errorf("a text message returned a file: %v", out)
+	}
+}
+
+func TestMediaType(t *testing.T) {
+	for _, c := range []struct{ served, declared, data, want string }{
+		{"image/png", "image/jpeg", "", "image/png"},
+		{"application/octet-stream", "application/pdf", "", "application/pdf"},
+		{"", "", "%PDF-1.4 x", "application/pdf"},
+		{"Application/PDF; charset=binary", "", "", "application/pdf"},
+	} {
+		if got := mediaType(c.served, c.declared, []byte(c.data)); got != c.want {
+			t.Errorf("mediaType(%q, %q) = %q, want %q", c.served, c.declared, got, c.want)
+		}
 	}
 }

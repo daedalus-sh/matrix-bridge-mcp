@@ -2,7 +2,7 @@
 // bridged chats (mautrix bridges). One instance serves one network, or all.
 //
 // It reads as one Matrix account and offers five tools — list_chats,
-// read_chat, search, get_context, get_image — and nothing that sends,
+// read_chat, search, get_context, get_file — and nothing that sends,
 // reacts, marks read, joins, leaves or deletes. Meant to run as an account
 // the bridge does not let send (no bridge permission, no login), so the
 // guarantee is the bridge's, not just this code's. See README.md.

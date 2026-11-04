@@ -244,3 +244,11 @@ func caption(m messageContent) string {
 	}
 	return ""
 }
+
+// fileName is the attachment's name: filename, or body when there is none.
+func fileName(m messageContent) string {
+	if m.FileName != "" {
+		return m.FileName
+	}
+	return m.Body
+}

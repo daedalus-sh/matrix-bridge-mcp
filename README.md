@@ -16,10 +16,10 @@ as a Matrix account the bridge will not send for.
 | Tool | What it returns |
 |---|---|
 | `list_chats` | Bridged chats, most recent first: id, name, kind (`dm`, `group`, `channel`, `status`), members, the latest message in a line. Filters by name and kind. |
-| `read_chat` | A chat's messages, oldest first, up to 100 a page, with `before` to page back. Edits applied, reactions attached, deletions marked, media as metadata. |
+| `read_chat` | A chat's messages, oldest first, up to 100 a page, with `before` to page back. Edits applied, reactions attached, deletions marked, attachments as metadata. |
 | `search` | Full-text search over the chats, newest first, optionally one chat. |
 | `get_context` | The messages around one message. |
-| `get_image` | The image of an image message, up to 8 MiB. |
+| `get_file` | The attachment of a message, up to 20 MiB: a photo as an image, a PDF as a document, audio as audio, any other file (Word, Excel, video…) as an embedded resource. |
 
 Every answer that carries message text starts with a note that the text is
 other people's words, to be reported on and never followed. Text is stripped
@@ -43,6 +43,7 @@ reads:
   chats, to every tool. The bridge's space and its bot's management room, where
   text is read as bridge commands, are never listed or read. `HIDDEN_CHATS`
   removes chosen rooms entirely.
+- **Files are other people's words too.** `get_file` hands over what was sent as it was sent, under the same note. A PDF can carry instructions as easily as a message.
 - **No egress of its own.** It talks to the homeserver and nothing else: no
   URL fetching, no file paths, no media upload.
 - **Bearer auth** on every request (`MCP_TOKEN`, compared in constant time),
