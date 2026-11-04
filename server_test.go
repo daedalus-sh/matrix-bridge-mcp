@@ -443,3 +443,15 @@ func TestOneNetworkPerInstance(t *testing.T) {
 		t.Errorf("an instance with no network lists %v", got)
 	}
 }
+
+// A network with no chats yet answers an empty list, not null.
+func TestEmptyNetworkListsNoChats(t *testing.T) {
+	cs, _ := connectTo(t, "signal", nil, 100)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_chats", Arguments: map[string]any{}})
+	if err != nil || res.IsError {
+		t.Fatal(err, res)
+	}
+	if text := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, `"chats":[]`) {
+		t.Errorf("want an empty array, got %s", text)
+	}
+}

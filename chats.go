@@ -168,7 +168,7 @@ func (c *chats) list(ctx context.Context, query, kind string, limit int) ([]*cha
 		return nil, 0, err
 	}
 	q := strings.ToLower(strings.TrimSpace(query))
-	var out []*chat
+	out := []*chat{} // an empty list is [], never null
 	for _, ch := range all {
 		if kind != "" && kind != "all" && ch.Kind != kind {
 			continue
