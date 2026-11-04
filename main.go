@@ -13,6 +13,8 @@
 //	MATRIX_URL       its base URL
 //	MATRIX_USER      the account's localpart
 //	MATRIX_PASSWORD  its password (or MATRIX_PASSWORD_FILE)
+//	MATRIX_DEVICE    the device id it signs in as (default MCPSERVER); give
+//	                 each instance on one account its own
 //	MATRIX_OPERATOR  the MXID whose messages are "me"
 //	MATRIX_NETWORK   the one network to serve, as its bridge's protocol id
 //	                 (whatsapp, linkedin); unset serves every bridge
@@ -93,6 +95,9 @@ func main() {
 	}
 
 	mx := newMatrixClient(socket, base, setting("MATRIX_USER", true), setting("MATRIX_PASSWORD", true))
+	if d := setting("MATRIX_DEVICE", false); d != "" {
+		mx.device = d
+	}
 	s := &server{
 		mx:    mx,
 		chats: &chats{mx: mx, operator: setting("MATRIX_OPERATOR", true), hidden: hidden, network: network},

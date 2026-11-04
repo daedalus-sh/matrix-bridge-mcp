@@ -55,6 +55,7 @@ reads:
 MATRIX_SOCKET=/run/synapse/client.sock   # or MATRIX_URL=http://127.0.0.1:8008
 MATRIX_USER=reader
 MATRIX_PASSWORD=…                         # or MATRIX_PASSWORD_FILE
+MATRIX_DEVICE=MCPSERVER                  # one per instance on the same account
 MATRIX_OPERATOR=@you:example.org          # whose messages are "me"
 MATRIX_NETWORK=whatsapp                   # only this bridge's chats (unset: all)
 NETWORK_NAME=WhatsApp                     # what the tools call them

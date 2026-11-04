@@ -27,13 +27,17 @@ type matrixClient struct {
 	socket   bool
 	user     string
 	password string
+	// The device every login of this instance signs in as, so a restart
+	// replaces its token instead of adding devices. Two instances on one
+	// account need two devices, or each login revokes the other's token.
+	device string
 
 	mu    sync.Mutex
 	token string
 }
 
 func newMatrixClient(socket, baseURL, user, password string) *matrixClient {
-	c := &matrixClient{base: strings.TrimRight(baseURL, "/"), user: user, password: password}
+	c := &matrixClient{base: strings.TrimRight(baseURL, "/"), user: user, password: password, device: "MCPSERVER"}
 	tr := &http.Transport{MaxIdleConns: 8, IdleConnTimeout: 90 * time.Second}
 	if socket != "" {
 		c.base = "http://synapse"
@@ -68,7 +72,7 @@ func (c *matrixClient) login(ctx context.Context) (string, error) {
 		"type":                        "m.login.password",
 		"identifier":                  map[string]string{"type": "m.id.user", "user": c.user},
 		"password":                    c.password,
-		"device_id":                   "MCPSERVER",
+		"device_id":                   c.device,
 		"initial_device_display_name": "matrix-bridge-mcp",
 	}, &r)
 	if err != nil {

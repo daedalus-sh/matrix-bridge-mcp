@@ -2,7 +2,7 @@
 
 buildGoModule {
   pname = "matrix-bridge-mcp";
-  version = "0.2.0";
+  version = "0.2.1";
 
   src = lib.fileset.toSource {
     root = ./.;
@@ -19,7 +19,7 @@ buildGoModule {
   ldflags = [
     "-s"
     "-w"
-    "-X main.version=0.2.0"
+    "-X main.version=0.2.1"
   ];
 
   # The tests run against an in-process homeserver stand-in; building the
