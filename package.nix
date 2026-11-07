@@ -28,7 +28,7 @@ buildGoModule {
 
   meta = {
     description = "A read-only MCP server over a Matrix homeserver's bridged chats";
-    homepage = "https://github.com/santiagotoscanini/matrix-bridge-mcp";
+    homepage = "https://github.com/daedalus-sh/matrix-bridge-mcp";
     license = lib.licenses.mit;
     mainProgram = "matrix-bridge-mcp";
   };

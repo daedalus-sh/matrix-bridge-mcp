@@ -1,4 +1,4 @@
-module github.com/santiagotoscanini/matrix-bridge-mcp
+module github.com/daedalus-sh/matrix-bridge-mcp
 
 go 1.26
 
