@@ -1,8 +1,16 @@
-{ lib, buildGoModule }:
+{
+  lib,
+  buildGoModule,
+  ffmpeg-headless,
+}:
 
+let
+  # transcribe decodes voice notes (Ogg/Opus, MP4, M4A…) with it.
+  ffmpeg = lib.getExe ffmpeg-headless;
+in
 buildGoModule {
   pname = "matrix-bridge-mcp";
-  version = "0.3.0";
+  version = "0.4.0";
 
   src = lib.fileset.toSource {
     root = ./.;
@@ -19,12 +27,16 @@ buildGoModule {
   ldflags = [
     "-s"
     "-w"
-    "-X main.version=0.3.0"
+    "-X main.version=0.4.0"
+    "-X main.defaultFFmpeg=${ffmpeg}"
   ];
 
-  # The tests run against an in-process homeserver stand-in; building the
-  # package runs them.
+  # The tests run against an in-process homeserver stand-in and decode audio
+  # with the same ffmpeg; building the package runs them.
   doCheck = true;
+  preCheck = ''
+    export PATH=${ffmpeg-headless}/bin:$PATH
+  '';
 
   meta = {
     description = "A read-only MCP server over a Matrix homeserver's bridged chats";

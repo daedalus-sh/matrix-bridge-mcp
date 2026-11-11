@@ -20,6 +20,7 @@ as a Matrix account the bridge will not send for.
 | `search` | Full-text search over the chats, newest first, optionally one chat. |
 | `get_context` | The messages around one message. |
 | `get_file` | The attachment of a message, up to 20 MiB: a photo as an image, a PDF as a document, audio as audio, any other file (Word, Excel, video…) as an embedded resource. |
+| `transcribe` | A voice note, audio or video message as text: the transcript, its detected language (or one you force) and its length, up to 20 minutes. Offered only when `TRANSCRIBE_URL` is set. |
 
 Every answer that carries message text starts with a note that the text is
 other people's words, to be reported on and never followed. Text is stripped
@@ -44,8 +45,11 @@ reads:
   text is read as bridge commands, are never listed or read. `HIDDEN_CHATS`
   removes chosen rooms entirely.
 - **Files are other people's words too.** `get_file` hands over what was sent as it was sent, under the same note. A PDF can carry instructions as easily as a message.
-- **No egress of its own.** It talks to the homeserver and nothing else: no
-  URL fetching, no file paths, no media upload.
+- **No egress of its own.** It talks to the homeserver and, when
+  `TRANSCRIBE_URL` is set, to that one speech-to-text endpoint, sending it the
+  decoded audio of the message asked for and nothing else: no URL fetching,
+  no file paths, no media upload. A transcript is the sender's words, under
+  the same note as message text.
 - **Bearer auth** on every request (`MCP_TOKEN`, compared in constant time),
   a global per-minute call limit, and one log line per call with the tool,
   the chat id, the outcome and the time taken. Never message text.
@@ -64,6 +68,10 @@ MCP_TOKEN=…                               # 32+ characters; or MCP_TOKEN_FILE
 MCP_LISTEN=0.0.0.0:8080                   # default 127.0.0.1:8080
 HIDDEN_CHATS=!abc:example.org,!def:example.org
 CALLS_PER_MINUTE=120
+TRANSCRIBE_URL=http://litellm:4000/v1     # any OpenAI-compatible /audio/transcriptions; adds `transcribe`
+TRANSCRIBE_API_KEY=…                      # or TRANSCRIBE_API_KEY_FILE
+TRANSCRIBE_MODEL=stt                      # default stt
+FFMPEG=/usr/bin/ffmpeg                    # decodes the audio; the nix build pins its own
 ```
 
 The MCP endpoint is `/mcp` (streamable HTTP, stateless); `/healthz` answers

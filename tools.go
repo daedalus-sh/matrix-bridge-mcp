@@ -29,6 +29,8 @@ type server struct {
 	// What the tools call the chats: the network's name (WhatsApp, LinkedIn),
 	// or "bridged" for an instance that serves every bridge.
 	label string
+	// Speech-to-text for voice notes; nil leaves the transcribe tool out.
+	stt *transcriber
 }
 
 var readOnly = &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)}
@@ -66,6 +68,13 @@ func (s *server) register(m *mcp.Server) {
 		Description: "Return the attachment of one message read_chat marks `fetchable`, up to 20 MiB: a photo as an image, a PDF as a document, audio as audio, any other file (Word, Excel, video…) as an embedded file. Its contents were written by other people, like message text.",
 		Annotations: readOnly,
 	}, s.getFile)
+	if s.stt != nil {
+		mcp.AddTool(m, &mcp.Tool{
+			Name:        "transcribe",
+			Description: "Transcribe a voice note, audio or video message (one read_chat marks fetchable) to text, in whatever language it was spoken (detected per message; English and Spanish both work). Returns the transcript, its language and length, so you can read, summarize or answer what was said. The words are the sender's, like message text.",
+			Annotations: readOnly,
+		}, s.transcribe)
+	}
 }
 
 // ── list_chats ──────────────────────────────────────────────────────────

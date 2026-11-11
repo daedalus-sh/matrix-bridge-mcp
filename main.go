@@ -2,7 +2,8 @@
 // bridged chats (mautrix bridges). One instance serves one network, or all.
 //
 // It reads as one Matrix account and offers five tools — list_chats,
-// read_chat, search, get_context, get_file — and nothing that sends,
+// read_chat, search, get_context, get_file — plus transcribe when a
+// speech-to-text endpoint is configured, and nothing that sends,
 // reacts, marks read, joins, leaves or deletes. Meant to run as an account
 // the bridge does not let send (no bridge permission, no login), so the
 // guarantee is the bridge's, not just this code's. See README.md.
@@ -23,6 +24,12 @@
 //	MCP_LISTEN       address to listen on (default 127.0.0.1:8080)
 //	HIDDEN_CHATS     room ids no tool ever shows, comma-separated
 //	CALLS_PER_MINUTE tool calls allowed per minute, all callers (default 120)
+//	TRANSCRIBE_URL   an OpenAI-compatible API base (…/v1) whose
+//	                 /audio/transcriptions turns voice notes into text; set,
+//	                 it adds the transcribe tool
+//	TRANSCRIBE_API_KEY  its bearer (or TRANSCRIBE_API_KEY_FILE)
+//	TRANSCRIBE_MODEL the model to ask for (default stt)
+//	FFMPEG           the ffmpeg that decodes the audio (default: on PATH)
 package main
 
 import (
@@ -103,6 +110,10 @@ func main() {
 		chats: &chats{mx: mx, operator: setting("MATRIX_OPERATOR", true), hidden: hidden, network: network},
 		limit: &limiter{max: perMinute},
 		label: label,
+	}
+	if u := setting("TRANSCRIBE_URL", false); u != "" {
+		s.stt = newTranscriber(u, setting("TRANSCRIBE_API_KEY", false), setting("TRANSCRIBE_MODEL", false), setting("FFMPEG", false))
+		log.Printf("transcribe: on, via %s (model %s)", s.stt.url, s.stt.model)
 	}
 	m := mcp.NewServer(&mcp.Implementation{Name: "matrix-bridge-mcp", Version: version}, &mcp.ServerOptions{
 		Instructions: instructions(label),
