@@ -78,6 +78,21 @@ func (v voiceHS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, ev("m.room.message", "$voice", ghostBob, 1007, map[string]any{"msgtype": "m.audio", "body": "Voice message", "url": "mxc://example.org/voice", "info": map[string]any{"mimetype": "audio/ogg", "duration": 5700}, "org.matrix.msc3245.voice": map[string]any{}}))
 		return
+	case "/_matrix/client/v3/rooms/" + dmRoom + "/event/$late":
+		// The bridge's first copy, before it had the file.
+		writeJSON(w, ev("m.room.message", "$late", ghostBob, 1008, map[string]any{"msgtype": "m.text", "body": "Voice message"}))
+		return
+	case "/_matrix/client/v1/rooms/" + dmRoom + "/relations/$late/m.replace":
+		edit := func(id, sender, url string) map[string]any {
+			return ev("m.room.message", id, sender, 1009, map[string]any{"msgtype": "m.audio", "body": "* Voice message", "url": "mxc://example.org/x",
+				"m.new_content": map[string]any{"msgtype": "m.audio", "body": "Voice message", "url": url},
+				"m.relates_to":  map[string]any{"rel_type": "m.replace", "event_id": "$late"}})
+		}
+		writeJSON(w, map[string]any{"chunk": []any{
+			edit("$imposter", operator, "mxc://example.org/abc"), // not the sender's: ignored
+			edit("$fix", ghostBob, "mxc://example.org/voice"),
+		}})
+		return
 	case "/_matrix/client/v1/media/download/example.org/voice":
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			break
@@ -228,5 +243,21 @@ func TestFFmpegDecoder(t *testing.T) {
 	}
 	if _, err := ffmpegDecoder(bin)(context.Background(), []byte("not audio")); err == nil {
 		t.Error("garbage decoded")
+	}
+}
+
+// A voice note whose file arrived in an edit is transcribed from the edit,
+// and only an edit by its own sender counts.
+func TestTranscribeFollowsTheSendersEdit(t *testing.T) {
+	cs, _ := connectSTT(t, fakeDecode) // fakeDecode refuses any file but the voice note
+	if out, isErr := callJSON(t, cs, "transcribe", map[string]any{"chat": dmRoom, "message": "$late"}); isErr {
+		t.Fatal(out)
+	}
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_file", Arguments: map[string]any{"chat": dmRoom, "message": "$late"}})
+	if err != nil || res.IsError {
+		t.Fatalf("get_file on an edited voice note: %v %v", err, res.Content)
+	}
+	if _, ok := res.Content[1].(*mcp.AudioContent); !ok {
+		t.Errorf("get_file returned %T, want audio", res.Content[1])
 	}
 }

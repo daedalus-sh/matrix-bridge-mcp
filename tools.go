@@ -277,13 +277,10 @@ func (s *server) getFile(ctx context.Context, _ *mcp.CallToolRequest, in fileIn)
 	if err != nil {
 		return done(nil, err)
 	}
-	var ev event
-	path := "/_matrix/client/v3/rooms/" + url.PathEscape(ch.ID) + "/event/" + url.PathEscape(in.Message)
-	if err := s.mx.do(ctx, "GET", path, nil, nil, &ev); err != nil {
+	ev, m, err := s.messageAt(ctx, ch.ID, in.Message)
+	if err != nil {
 		return done(nil, err)
 	}
-	var m messageContent
-	_ = json.Unmarshal(ev.Content, &m)
 	if ev.Type != "m.room.message" || !hasMedia(m) {
 		return done(nil, errors.New("that message carries no file"))
 	}
@@ -372,4 +369,40 @@ func (s *server) begin(tool, chatID string) (func(*mcp.CallToolResult, error) (*
 		log.Printf("tool=%s chat=%q outcome=%s took=%s", tool, chatID, outcome, time.Since(start).Round(time.Millisecond))
 		return res, nil, nil
 	}, stop
+}
+
+// messageAt fetches one message as read_chat shows it: with its latest edit
+// applied. A bridge edits a message to attach media it could not fetch at
+// first (mautrix sends a WhatsApp voice note's file as an edit), so the
+// original event alone can carry no file. Only an edit by the message's own
+// sender counts, as the spec requires; with no edits, or none readable, the
+// original stands.
+func (s *server) messageAt(ctx context.Context, roomID, eventID string) (event, messageContent, error) {
+	var ev event
+	path := "/_matrix/client/v3/rooms/" + url.PathEscape(roomID) + "/event/" + url.PathEscape(eventID)
+	if err := s.mx.do(ctx, "GET", path, nil, nil, &ev); err != nil {
+		return ev, messageContent{}, err
+	}
+	var m messageContent
+	_ = json.Unmarshal(ev.Content, &m)
+	if ev.Type != "m.room.message" {
+		return ev, m, nil
+	}
+	var r struct {
+		Chunk []event `json:"chunk"`
+	}
+	rel := "/_matrix/client/v1/rooms/" + url.PathEscape(roomID) + "/relations/" + url.PathEscape(eventID) + "/m.replace"
+	if err := s.mx.do(ctx, "GET", rel, url.Values{"dir": {"b"}, "limit": {"20"}}, nil, &r); err != nil {
+		return ev, m, nil
+	}
+	for _, e := range r.Chunk { // newest first
+		if e.Type != "m.room.message" || e.Sender != ev.Sender {
+			continue
+		}
+		var em messageContent
+		if json.Unmarshal(e.Content, &em) == nil && em.NewContent != nil {
+			return ev, *em.NewContent, nil
+		}
+	}
+	return ev, m, nil
 }

@@ -10,7 +10,7 @@ let
 in
 buildGoModule {
   pname = "matrix-bridge-mcp";
-  version = "0.4.0";
+  version = "0.4.1";
 
   src = lib.fileset.toSource {
     root = ./.;
@@ -27,7 +27,7 @@ buildGoModule {
   ldflags = [
     "-s"
     "-w"
-    "-X main.version=0.4.0"
+    "-X main.version=0.4.1"
     "-X main.defaultFFmpeg=${ffmpeg}"
   ];
 

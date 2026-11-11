@@ -242,13 +242,10 @@ func (s *server) transcribe(ctx context.Context, _ *mcp.CallToolRequest, in tran
 	if err != nil {
 		return done(nil, err)
 	}
-	var ev event
-	path := "/_matrix/client/v3/rooms/" + url.PathEscape(ch.ID) + "/event/" + url.PathEscape(in.Message)
-	if err := s.mx.do(ctx, "GET", path, nil, nil, &ev); err != nil {
+	ev, m, err := s.messageAt(ctx, ch.ID, in.Message)
+	if err != nil {
 		return done(nil, err)
 	}
-	var m messageContent
-	_ = json.Unmarshal(ev.Content, &m)
 	if ev.Type != "m.room.message" || (m.MsgType != "m.audio" && m.MsgType != "m.video") || m.URL == "" {
 		return done(nil, errors.New("that message is not a voice note, audio or video"))
 	}
